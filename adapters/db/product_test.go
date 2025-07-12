@@ -12,9 +12,14 @@ import (
 var Db *sql.DB
 
 func Setup() {
-	Db, _ := sql.Open("sqlite3", ":memory:")
-	createTable(Db)
-	createProduct(Db)
+    var err error
+    Db, err = sql.Open("sqlite3", ":memory:")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    createTable(Db)
+    createProduct(Db)
 }
 
 func createTable(db *sql.DB) {
