@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/viniciusidacruz/hexagonal-archtecture/adapters/cli"
 )
@@ -16,7 +18,13 @@ var cliCmd = &cobra.Command{
 	Use:   "cli",
 	Short: "Executa ações sobre produtos",
 	Run: func(cmd *cobra.Command, args []string) {
-		cli.Run(productService, action, productID, productName, productPrice)
+		result, err := cli.Run(productService, action, productID, productName, productPrice)
+
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		fmt.Println(result)
 	},
 }
 
