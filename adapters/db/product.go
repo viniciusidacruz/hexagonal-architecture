@@ -1,75 +1,75 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/viniciusidacruz/hexagonal-archtecture/application"
+	prismadb "github.com/viniciusidacruz/hexagonal-archtecture/infra/prisma/db"
 )
 
-type ProductDb struct {
-	db *sql.DB
+type ProductPrisma struct {
+	client *prismadb.PrismaClient
 }
 
-func NewProductDb(db *sql.DB) *ProductDb {
-	return &ProductDb{db: db}
+func NewProductPrisma(client *prismadb.PrismaClient) *ProductPrisma {
+	return &ProductPrisma{client: client}
 }
 
-func (p *ProductDb) Get(id string) (application.ProductInterface, error) {
-	var product application.Product
-	stmt, err := p.db.Prepare("SELECT id, name, price, status FROM products WHERE id = ?")
+func (p *ProductPrisma) Get(id string) (application.ProductInterface, error) {
+	ctx := context.Background()
+
+	pr, err := p.client.Product.FindUnique(
+		prismadb.Product.ID.Equals(id),
+	).Exec(ctx)
 
 	if err != nil {
 		return nil, err
 	}
-
-	defer stmt.Close()
-
-	err = stmt.QueryRow(id).Scan(&product.ID, &product.Name, &product.Price, &product.Status)
-
-	if err != nil {
-		return nil, err
+	if pr == nil {
+		return nil, sql.ErrNoRows
 	}
 
-	return &product, nil
-}
-
-func (p *ProductDb) create(product application.ProductInterface) (application.ProductInterface, error) {
-	stmt, err := p.db.Prepare("INSERT INTO products (id, name, price, status) VALUES (?, ?, ?, ?)")
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer stmt.Close()
-
-	_, err = stmt.Exec(product.GetID(), product.GetName(), product.GetPrice(), product.GetStatus())
-
-	if err != nil {
-		return nil, err
+	product := &application.Product{
+		ID:     pr.ID,
+		Name:   pr.Name,
+		Price:  pr.Price,
+		Status: pr.Status,
 	}
 
 	return product, nil
 }
 
-func (p *ProductDb) update(product application.ProductInterface) (application.ProductInterface, error) {
-	_, err := p.db.Exec("UPDATE products SET name = ?, price = ?, status = ? WHERE id = ?", product.GetName(), product.GetPrice(), product.GetStatus(), product.GetID())
+func (p *ProductPrisma) Save(prod application.ProductInterface) (application.ProductInterface, error) {
+	ctx := context.Background()
+
+	pr, err := p.client.Product.
+		FindUnique(
+			prismadb.Product.ID.Equals(prod.GetID()),
+		).
+		Update(
+			prismadb.Product.Name.Set(prod.GetName()),
+			prismadb.Product.Price.Set(prod.GetPrice()),
+			prismadb.Product.Status.Set(prod.GetStatus()),
+		).
+		Exec(ctx)
+
+	if err == prismadb.ErrNotFound {
+		pr, err = p.client.Product.CreateOne(
+			prismadb.Product.Name.Set(prod.GetName()),
+			prismadb.Product.Price.Set(prod.GetPrice()),
+			prismadb.Product.Status.Set(prod.GetStatus()),
+		).Exec(ctx)
+	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	return product, nil
-}
-
-func (p *ProductDb) Save(product application.ProductInterface) (application.ProductInterface, error) {
-	var rows int
-
-	p.db.QueryRow("SELECT count(*) FROM products WHERE id = ?", product.GetID()).Scan(&rows)
-
-	if rows == 0 {
-		return p.create(product)
-	}
-
-	return p.update(product)
+	return &application.Product{
+		ID:     pr.ID,
+		Name:   pr.Name,
+		Price:  pr.Price,
+		Status: pr.Status,
+	}, nil
 }
